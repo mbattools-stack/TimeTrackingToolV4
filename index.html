@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TimeTrack</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23e8a020'/><text y='.9em' x='50' text-anchor='middle' font-size='70'>⏱</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== WELCOME SCREEN ===== -->
+  <div id="welcome-screen" class="screen">
+    <div class="welcome-wrap">
+      <div class="welcome-icon">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <rect width="64" height="64" rx="16" fill="#E8A020"/>
+          <circle cx="32" cy="32" r="18" stroke="#1a1612" stroke-width="3" fill="none"/>
+          <line x1="32" y1="20" x2="32" y2="32" stroke="#1a1612" stroke-width="3" stroke-linecap="round"/>
+          <line x1="32" y1="32" x2="40" y2="38" stroke="#1a1612" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="32" cy="32" r="2.5" fill="#1a1612"/>
+        </svg>
+      </div>
+      <h1 class="welcome-title">TimeTrack</h1>
+      <p class="welcome-sub">Einfache Zeiterfassung für deine Projekte.</p>
+      <div class="welcome-form">
+        <label for="welcome-name">Wie heißt du?</label>
+        <input type="text" id="welcome-name" placeholder="Name eingeben" maxlength="30" autocomplete="off">
+        <button id="btn-welcome-start" class="btn btn-accent">Loslegen</button>
+      </div>
+      <p class="welcome-note">Deine Daten werden lokal im Browser gespeichert.</p>
+    </div>
+  </div>
+
+  <!-- ===== MAIN APP ===== -->
+  <div id="app" class="screen hidden">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
+          <rect width="64" height="64" rx="16" fill="#E8A020"/>
+          <circle cx="32" cy="32" r="18" stroke="#1a1612" stroke-width="3" fill="none"/>
+          <line x1="32" y1="20" x2="32" y2="32" stroke="#1a1612" stroke-width="3" stroke-linecap="round"/>
+          <line x1="32" y1="32" x2="40" y2="38" stroke="#1a1612" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="32" cy="32" r="2.5" fill="#1a1612"/>
+        </svg>
+        <span class="brand-name">TimeTrack</span>
+      </div>
+      <div class="header-actions">
+        <span id="header-user" class="header-user"></span>
+        <button id="btn-settings" class="btn-icon" title="Einstellungen">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="today">Heute</button>
+      <button class="tab" data-tab="week">Woche</button>
+      <button class="tab" data-tab="projects">Projekte</button>
+    </nav>
+
+    <!-- ===== TODAY ===== -->
+    <main id="tab-today" class="tab-panel active">
+
+      <!-- Timer -->
+      <section id="timer-section" class="card timer-card hidden">
+        <div class="timer-row">
+          <div class="timer-project">
+            <span id="timer-dot" class="dot"></span>
+            <span id="timer-name"></span>
+          </div>
+          <div id="timer-clock" class="timer-clock">00:00:00</div>
+          <button id="btn-stop" class="btn btn-stop" title="Stop">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section id="no-timer" class="empty-hero">
+        <p>Wähle ein Projekt, um den Timer zu starten.</p>
+      </section>
+
+      <!-- Project Chips -->
+      <section class="section">
+        <div class="section-head">
+          <h2>Projekte</h2>
+          <button id="btn-manual" class="btn btn-ghost btn-xs" title="Manueller Eintrag">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Manuell
+          </button>
+        </div>
+        <div id="chips" class="chips"></div>
+      </section>
+
+      <!-- Entries -->
+      <section class="section">
+        <div class="section-head">
+          <h2>Einträge</h2>
+          <span id="day-total" class="day-total">0:00</span>
+        </div>
+        <div id="entries" class="entries"></div>
+      </section>
+    </main>
+
+    <!-- ===== WEEK ===== -->
+    <main id="tab-week" class="tab-panel">
+      <section class="section">
+        <div class="section-head">
+          <h2>Wochenübersicht</h2>
+          <button id="btn-csv" class="btn btn-ghost btn-xs">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+        </div>
+        <div id="week-chart" class="week-chart"></div>
+        <div id="week-detail" class="week-detail"></div>
+      </section>
+    </main>
+
+    <!-- ===== PROJECTS ===== -->
+    <main id="tab-projects" class="tab-panel">
+      <section class="section">
+        <div class="section-head">
+          <h2>Projekte verwalten</h2>
+          <button id="btn-new-project" class="btn btn-accent btn-xs">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Neu
+          </button>
+        </div>
+        <div id="project-list" class="project-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== MODALS ===== -->
+
+  <!-- Project Modal -->
+  <div id="modal-project" class="modal hidden">
+    <div class="modal-bg"></div>
+    <div class="modal-box">
+      <h3 id="mp-title">Neues Projekt</h3>
+      <div class="field">
+        <label for="mp-name">Name</label>
+        <input type="text" id="mp-name" maxlength="40" placeholder="z.B. Website Redesign" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Farbe</label>
+        <div id="mp-colors" class="swatches"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost modal-cancel">Abbrechen</button>
+        <button id="mp-save" class="btn btn-accent">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Entry Modal -->
+  <div id="modal-manual" class="modal hidden">
+    <div class="modal-bg"></div>
+    <div class="modal-box">
+      <h3>Manueller Eintrag</h3>
+      <div class="field">
+        <label for="me-project">Projekt</label>
+        <select id="me-project"></select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="me-start">Start</label>
+          <input type="time" id="me-start">
+        </div>
+        <div class="field">
+          <label for="me-end">Ende</label>
+          <input type="time" id="me-end">
+        </div>
+      </div>
+      <div class="field">
+        <label for="me-date">Datum</label>
+        <input type="date" id="me-date">
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost modal-cancel">Abbrechen</button>
+        <button id="me-save" class="btn btn-accent">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="modal-confirm" class="modal hidden">
+    <div class="modal-bg"></div>
+    <div class="modal-box modal-sm">
+      <h3 id="mc-title">Löschen?</h3>
+      <p id="mc-msg"></p>
+      <div class="modal-foot">
+        <button class="btn btn-ghost modal-cancel">Abbrechen</button>
+        <button id="mc-ok" class="btn btn-danger">Löschen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="modal-settings" class="modal hidden">
+    <div class="modal-bg"></div>
+    <div class="modal-box">
+      <h3>Einstellungen</h3>
+      <div class="field">
+        <label for="ms-name">Name</label>
+        <input type="text" id="ms-name" maxlength="30" autocomplete="off">
+      </div>
+      <div class="settings-divider"></div>
+      <div class="settings-danger">
+        <p>Alle Daten löschen und von vorne beginnen?</p>
+        <button id="btn-reset" class="btn btn-danger btn-xs">Zurücksetzen</button>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost modal-cancel">Abbrechen</button>
+        <button id="ms-save" class="btn btn-accent">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toasts" class="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
