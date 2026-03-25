@@ -1,0 +1,13 @@
+{
+  "name": "timetrack",
+  "version": "2.0.0",
+  "description": "Einfache Zeiterfassung – localStorage only",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}
