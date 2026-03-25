@@ -1,5 +1,5 @@
 /* ============================================
-   TIMETRACK — STYLES
+   TIMETRACK — STYLES v2
    Industrial-warm aesthetic: deep charcoal,
    amber accent, monospace data, Swiss grid.
    ============================================ */
@@ -54,6 +54,7 @@ input,select,button{font-family:inherit}
   padding:9px 16px;white-space:nowrap;
   text-decoration:none;line-height:1;
 }
+.btn:disabled{opacity:.38;cursor:not-allowed;pointer-events:none}
 .btn-xs{padding:6px 11px;font-size:.75rem}
 .btn-accent{background:var(--accent);color:#1a1612}
 .btn-accent:hover{background:#d4900e}
@@ -66,6 +67,7 @@ input,select,button{font-family:inherit}
   display:flex;align-items:center;justify-content:center;
   border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer;
   transition:all .15s var(--ease);
+  flex-shrink:0;
 }
 .btn-stop:hover{background:#c03030;transform:scale(1.08)}
 .btn-icon{
@@ -74,6 +76,7 @@ input,select,button{font-family:inherit}
   transition:color .15s;display:flex;align-items:center;
 }
 .btn-icon:hover{color:var(--text)}
+.btn-icon:disabled{opacity:.3;cursor:not-allowed}
 
 /* ============================================
    WELCOME
@@ -172,7 +175,7 @@ input,select,button{font-family:inherit}
 }
 .timer-row{display:flex;align-items:center;gap:14px}
 .timer-project{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.timer-name{font-weight:600;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#timer-name{font-weight:600;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .timer-clock{
   font-family:var(--mono);font-size:1.6rem;font-weight:600;
   color:var(--accent);letter-spacing:.02em;
@@ -220,16 +223,35 @@ input,select,button{font-family:inherit}
 .entry-name{flex:1;font-weight:500;font-size:.84rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .entry-span{color:var(--text-2);font-size:.75rem;white-space:nowrap}
 .entry-dur{font-family:var(--mono);font-size:.84rem;font-weight:600;min-width:52px;text-align:right}
-.entry-del{
+
+/* Entry action buttons (edit + delete) */
+.entry-act{
   background:none;border:none;color:var(--text-3);cursor:pointer;
-  padding:3px;border-radius:4px;transition:all .12s;display:flex;
+  padding:3px;border-radius:4px;transition:all .12s;display:flex;flex-shrink:0;
 }
-.entry-del:hover{color:var(--red);background:var(--red-dim)}
+.entry-act:hover{color:var(--text);background:var(--bg-hover)}
+.entry-act.entry-del:hover{color:var(--red);background:var(--red-dim)}
+
 .empty{text-align:center;color:var(--text-3);font-size:.84rem;padding:28px 0}
 
 /* ============================================
    WEEK
    ============================================ */
+
+/* Week header navigation */
+.week-nav{
+  display:flex;align-items:center;gap:4px;
+}
+.week-nav-label{
+  font-size:.85rem;font-weight:600;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:.04em;
+  min-width:120px;text-align:center;
+}
+.week-head-right{
+  display:flex;align-items:center;gap:6px;
+}
+
+/* Stacked bar chart */
 .week-chart{
   display:flex;align-items:flex-end;gap:6px;
   height:160px;padding:14px 0;margin-bottom:20px;
@@ -242,20 +264,38 @@ input,select,button{font-family:inherit}
   width:100%;max-width:44px;border-radius:5px 5px 2px 2px;
   min-height:2px;transition:height .4s var(--ease);
   background:var(--border-hi);
+  overflow:hidden;
+  display:flex;flex-direction:column;justify-content:flex-end;
 }
-.bar.is-today{background:var(--accent)}
+.bar.is-today{background:rgba(232,160,32,.25)}
+.bar.has-data{background:transparent}
+.bar-seg{
+  width:100%;
+  transition:height .35s var(--ease);
+  flex-shrink:0;
+}
 .bar-val{font-family:var(--mono);font-size:.65rem;color:var(--text-2);min-height:14px}
 .bar-day{font-size:.7rem;color:var(--text-3);font-weight:600}
 .bar-day.is-today{color:var(--accent)}
 
+/* Week detail / project breakdown */
 .week-detail h3{font-size:.8rem;font-weight:600;color:var(--text-2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em}
 .wd-row{
   display:flex;align-items:center;gap:9px;
   padding:9px 0;border-bottom:1px solid var(--border);
 }
 .wd-row:last-child{border-bottom:none}
-.wd-name{flex:1;font-size:.84rem;font-weight:500}
-.wd-time{font-family:var(--mono);font-size:.84rem;font-weight:600}
+.wd-name{font-size:.84rem;font-weight:500;min-width:80px}
+.wd-bar-wrap{
+  flex:1;height:4px;
+  background:var(--border);border-radius:2px;
+  overflow:hidden;
+}
+.wd-bar{
+  height:100%;border-radius:2px;
+  opacity:.75;transition:width .5s var(--ease);
+}
+.wd-time{font-family:var(--mono);font-size:.84rem;font-weight:600;min-width:52px;text-align:right}
 
 /* ============================================
    PROJECTS LIST
@@ -268,6 +308,7 @@ input,select,button{font-family:inherit}
   border-radius:var(--r);transition:background .12s;
 }
 .pcard:hover{background:var(--bg-hover)}
+.pcard.archived{opacity:.6}
 .pcard-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
 .pcard-info{flex:1;min-width:0}
 .pcard-name{font-weight:600;font-size:.9rem}
@@ -332,8 +373,17 @@ input,select,button{font-family:inherit}
 .sw:hover{transform:scale(1.12)}
 .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--bg-raised)}
 
-/* Settings extras */
-.settings-divider{height:1px;background:var(--border);margin:18px 0}
+/* Settings sections */
+.settings-divider{height:1px;background:var(--border);margin:16px 0}
+
+.settings-section{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.settings-section-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.settings-section-label{font-size:.8rem;font-weight:600;color:var(--text)}
+.settings-section-desc{font-size:.72rem;color:var(--text-3);line-height:1.4}
+.settings-section-acts{display:flex;gap:6px;flex-shrink:0}
+
 .settings-danger{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .settings-danger p{font-size:.8rem;color:var(--text-2);margin:0}
 
@@ -366,4 +416,6 @@ input,select,button{font-family:inherit}
   .btn-stop{order:3}
   .header-user{display:none}
   .entry-span{display:none}
+  .week-nav-label{min-width:90px;font-size:.75rem}
+  .settings-section{flex-direction:column;align-items:flex-start;gap:8px}
 }

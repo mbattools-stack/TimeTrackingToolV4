@@ -1,5 +1,5 @@
 /* ============================================
-   TIMETRACK – APP (localStorage only)
+   TIMETRACK – APP v2 (localStorage only)
    ============================================ */
 
 ;(function(){
@@ -47,12 +47,17 @@ function fmtTime(iso) {
   const d = new Date(iso);
   return d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 }
-function weekDates() {
+function fmtShortDate(dateStr) {
+  const [,m,d] = dateStr.split('-');
+  return `${d}.${m}.`;
+}
+function weekDates(offset = 0) {
   const now = new Date();
   const day = now.getDay();
   const off = day === 0 ? -6 : 1 - day;
   return Array.from({length:7},(_,i)=>{
-    const d = new Date(now); d.setDate(now.getDate()+off+i);
+    const d = new Date(now);
+    d.setDate(now.getDate() + off + i + offset * 7);
     return d.toISOString().slice(0,10);
   });
 }
@@ -68,11 +73,15 @@ function toast(msg, err) {
 }
 
 // ---- State ----
-let user      = load(K.USER, null);          // { name }
-let projects  = load(K.PROJECTS, []);        // [{ id, name, color, archived, created }]
-let entries   = load(K.ENTRIES, []);          // [{ id, projectId, start, end, duration, date }]
-let timer     = load(K.TIMER, null);         // { projectId, startTime (ISO) }
-let tick      = null;
+let user        = load(K.USER, null);
+let projects    = load(K.PROJECTS, []);
+let entries     = load(K.ENTRIES, []);
+let timer       = load(K.TIMER, null);
+let tick        = null;
+let weekOffset  = 0;
+let editEntryId = null;
+let editPid     = null;
+let selColor    = COLORS[0];
 
 // ---- Persist helpers ----
 function saveProjects() { save(K.PROJECTS, projects); }
@@ -88,13 +97,17 @@ function init() {
     $('#welcome-screen').classList.remove('hidden');
     $('#app').classList.add('hidden');
   } else {
-    $('#welcome-screen').classList.add('hidden');
-    $('#app').classList.remove('hidden');
-    $('#header-user').textContent = user.name;
-    renderAll();
-    startTick();
+    showApp();
   }
   bindEvents();
+}
+
+function showApp() {
+  $('#welcome-screen').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#header-user').textContent = user.name;
+  renderAll();
+  startTick();
 }
 
 // ============================================
@@ -104,11 +117,7 @@ function handleWelcome() {
   const name = $('#welcome-name').value.trim() || 'User';
   user = { name };
   saveUser();
-  $('#welcome-screen').classList.add('hidden');
-  $('#app').classList.remove('hidden');
-  $('#header-user').textContent = user.name;
-  renderAll();
-  startTick();
+  showApp();
 }
 
 // ============================================
@@ -167,13 +176,16 @@ function renderTimer() {
   } else {
     sec.classList.add('hidden');
     no.classList.remove('hidden');
+    document.title = 'TimeTrack';
   }
 }
 
 function updateClock() {
   if (!timer) return;
   const elapsed = Date.now() - new Date(timer.startTime).getTime();
-  $('#timer-clock').textContent = fmtDur(elapsed);
+  const formatted = fmtDur(elapsed);
+  $('#timer-clock').textContent = formatted;
+  document.title = `⏱ ${formatted} – TimeTrack`;
 }
 
 function startTick() {
@@ -217,6 +229,7 @@ function stopTimerAction() {
   }
   timer = null;
   saveTimer();
+  document.title = 'TimeTrack';
   renderAll();
   toast('Timer gestoppt');
 }
@@ -245,7 +258,10 @@ function renderEntries() {
       <span class="entry-name">${esc(p?.name||'–')}</span>
       <span class="entry-span">${fmtTime(e.start)} – ${fmtTime(e.end)}</span>
       <span class="entry-dur">${fmtHM(e.duration)}</span>
-      <button class="entry-del" data-eid="${e.id}" title="Löschen">
+      <button class="entry-act" data-action="edit" data-eid="${e.id}" title="Bearbeiten">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="entry-act entry-del" data-action="del" data-eid="${e.id}" title="Löschen">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>`;
@@ -253,15 +269,20 @@ function renderEntries() {
 
   $('#day-total').textContent = fmtHM(total);
 
-  list.querySelectorAll('.entry-del').forEach(btn => {
+  list.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      confirmAction('Eintrag löschen', 'Diesen Zeiteintrag wirklich löschen?', () => {
-        entries = entries.filter(x => x.id !== btn.dataset.eid);
-        saveEntries();
-        renderAll();
-        toast('Eintrag gelöscht');
-      });
+      const eid = btn.dataset.eid;
+      if (btn.dataset.action === 'edit') {
+        openEditEntry(eid);
+      } else {
+        confirmAction('Eintrag löschen', 'Diesen Zeiteintrag wirklich löschen?', () => {
+          entries = entries.filter(x => x.id !== eid);
+          saveEntries();
+          renderAll();
+          toast('Eintrag gelöscht');
+        }, 'Löschen', 'btn-danger');
+      }
     });
   });
 }
@@ -270,41 +291,75 @@ function renderEntries() {
 // WEEK VIEW
 // ============================================
 function renderWeek() {
-  const dates = weekDates();
+  const dates = weekDates(weekOffset);
   const today = todayStr();
   const weekE = entries.filter(e => dates.includes(e.date));
 
+  // Aggregate by day + by day+project
   const byDay = {};
-  dates.forEach(d => byDay[d] = 0);
-  weekE.forEach(e => { if (byDay[e.date]!==undefined) byDay[e.date] += e.duration; });
+  const byDayProject = {};
+  dates.forEach(d => { byDay[d] = 0; byDayProject[d] = {}; });
+  weekE.forEach(e => {
+    if (byDay[e.date] !== undefined) {
+      byDay[e.date] += e.duration;
+      byDayProject[e.date][e.projectId] = (byDayProject[e.date][e.projectId]||0) + e.duration;
+    }
+  });
   const max = Math.max(...Object.values(byDay), 1);
 
-  $('#week-chart').innerHTML = dates.map((d,i) => {
+  // Week label & nav state
+  const isCurrentWeek = weekOffset === 0;
+  $('#week-nav-label').textContent = isCurrentWeek
+    ? 'Diese Woche'
+    : `${fmtShortDate(dates[0])} – ${fmtShortDate(dates[6])}`;
+  $('#btn-week-next').disabled = weekOffset >= 0;
+  $('#btn-week-today').classList.toggle('hidden', isCurrentWeek);
+
+  // Stacked bar chart
+  $('#week-chart').innerHTML = dates.map((d, i) => {
     const ms = byDay[d];
-    const pct = Math.max((ms/max)*100, 2);
-    const t = d === today;
+    const isToday = d === today && isCurrentWeek;
+    const totalPct = Math.max((ms / max) * 100, ms > 0 ? 4 : 2);
+    const hasData = ms > 0;
+
+    let segments = '';
+    if (hasData) {
+      const sorted = Object.entries(byDayProject[d]).sort((a,b) => b[1]-a[1]);
+      segments = sorted.map(([pid, pms]) => {
+        const p = projects.find(x => x.id === pid);
+        const pct = (pms / ms) * 100;
+        return `<div class="bar-seg" style="height:${pct}%;background:${p?.color||'#888'}"></div>`;
+      }).join('');
+    }
+
     return `<div class="bar-col">
       <div class="bar-box">
-        <span class="bar-val">${ms>0?fmtHM(ms):''}</span>
-        <div class="bar${t?' is-today':''}" style="height:${pct}%"></div>
+        <span class="bar-val">${ms > 0 ? fmtHM(ms) : ''}</span>
+        <div class="bar${isToday ? ' is-today' : ''}${hasData ? ' has-data' : ''}" style="height:${totalPct}%">
+          ${segments}
+        </div>
       </div>
-      <span class="bar-day${t?' is-today':''}">${DAYS[i]}</span>
+      <span class="bar-day${isToday ? ' is-today' : ''}">${DAYS[i]}</span>
     </div>`;
   }).join('');
 
-  // breakdown by project
+  // Project breakdown with mini progress bars
   const byP = {};
   weekE.forEach(e => { byP[e.projectId] = (byP[e.projectId]||0) + e.duration; });
-  const sorted = Object.entries(byP).sort((a,b)=>b[1]-a[1]);
+  const sorted = Object.entries(byP).sort((a,b) => b[1]-a[1]);
   const total = sorted.reduce((s,[,ms])=>s+ms, 0);
 
   $('#week-detail').innerHTML = `
     <h3>Gesamt: ${fmtHM(total)}</h3>
     ${sorted.length ? sorted.map(([pid,ms])=>{
       const p = projects.find(x=>x.id===pid);
+      const pct = total > 0 ? Math.round((ms/total)*100) : 0;
       return `<div class="wd-row">
         <span class="dot" style="background:${p?.color||'#666'}"></span>
         <span class="wd-name">${esc(p?.name||'–')}</span>
+        <div class="wd-bar-wrap">
+          <div class="wd-bar" style="width:${pct}%;background:${p?.color||'#666'}"></div>
+        </div>
         <span class="wd-time">${fmtHM(ms)}</span>
       </div>`;
     }).join('') : '<p class="empty">Keine Einträge diese Woche.</p>'}
@@ -314,18 +369,30 @@ function renderWeek() {
 // ============================================
 // PROJECTS LIST
 // ============================================
+function projectTotalMs(pid) {
+  return entries.filter(e => e.projectId === pid).reduce((s,e)=>s+e.duration, 0);
+}
+
 function renderProjectList() {
   const list = $('#project-list');
   if (!projects.length) {
     list.innerHTML = '<p class="empty">Noch keine Projekte.</p>';
     return;
   }
-  list.innerHTML = projects.map(p => `
-    <div class="pcard">
+
+  // Active first, then archived
+  const sorted = [...projects].sort((a,b) => {
+    if (a.archived !== b.archived) return a.archived ? 1 : -1;
+    return 0;
+  });
+
+  list.innerHTML = sorted.map(p => {
+    const total = projectTotalMs(p.id);
+    return `<div class="pcard${p.archived?' archived':''}">
       <span class="pcard-dot" style="background:${p.color}"></span>
       <div class="pcard-info">
         <div class="pcard-name">${esc(p.name)}</div>
-        <div class="pcard-meta">${p.archived?'Archiviert':'Aktiv'}</div>
+        <div class="pcard-meta">${p.archived?'Archiviert':'Aktiv'}${total>0?` · ${fmtHM(total)} gesamt`:''}</div>
       </div>
       <div class="pcard-acts">
         <button class="btn-icon" data-action="edit" data-pid="${p.id}" title="Bearbeiten">
@@ -341,8 +408,8 @@ function renderProjectList() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   list.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -358,9 +425,6 @@ function renderProjectList() {
 // ============================================
 // PROJECT CRUD
 // ============================================
-let editPid = null;
-let selColor = COLORS[0];
-
 function openNewProject() {
   editPid = null;
   selColor = COLORS[0];
@@ -423,21 +487,26 @@ function archiveProject(pid) {
 function deleteProject(pid) {
   const p = projects.find(x=>x.id===pid);
   if (!p) return;
-  confirmAction('Projekt löschen', `"${p.name}" wirklich löschen? Alle zugehörigen Einträge bleiben erhalten.`, () => {
-    if (timer?.projectId === pid) stopTimerAction();
-    projects = projects.filter(x=>x.id!==pid);
-    saveProjects();
-    renderAll();
-    toast('Projekt gelöscht');
-  });
+  confirmAction(
+    'Projekt löschen',
+    `„${p.name}" wirklich löschen? Alle zugehörigen Einträge bleiben erhalten.`,
+    () => {
+      if (timer?.projectId === pid) stopTimerAction();
+      projects = projects.filter(x=>x.id!==pid);
+      saveProjects();
+      renderAll();
+      toast('Projekt gelöscht');
+    }
+  );
 }
 
 // ============================================
-// MANUAL ENTRY
+// MANUAL ENTRY + EDIT ENTRY (shared modal)
 // ============================================
 function openManual() {
   const active = projects.filter(p=>!p.archived);
   if (!active.length) { toast('Erstelle zuerst ein Projekt.',true); return; }
+  editEntryId = null;
   const sel = $('#me-project');
   sel.innerHTML = active.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('#me-date').value = todayStr();
@@ -445,31 +514,64 @@ function openManual() {
   const ago = new Date(now.getTime()-3600000);
   $('#me-start').value = pad2(ago.getHours())+':'+pad2(ago.getMinutes());
   $('#me-end').value = pad2(now.getHours())+':'+pad2(now.getMinutes());
+  $('#me-modal-title').textContent = 'Manueller Eintrag';
+  openModal('modal-manual');
+}
+
+function openEditEntry(eid) {
+  const e = entries.find(x => x.id === eid);
+  if (!e) return;
+  editEntryId = eid;
+
+  // Include archived project if it belongs to this entry
+  const relevant = projects.filter(p => !p.archived || p.id === e.projectId);
+  const sel = $('#me-project');
+  sel.innerHTML = relevant.map(p=>
+    `<option value="${p.id}"${p.id===e.projectId?' selected':''}>${esc(p.name)}</option>`
+  ).join('');
+
+  $('#me-date').value = e.date;
+  const startD = new Date(e.start);
+  const endD   = new Date(e.end);
+  $('#me-start').value = pad2(startD.getHours())+':'+pad2(startD.getMinutes());
+  $('#me-end').value   = pad2(endD.getHours())+':'+pad2(endD.getMinutes());
+  $('#me-modal-title').textContent = 'Eintrag bearbeiten';
   openModal('modal-manual');
 }
 
 function saveManual() {
-  const pid = $('#me-project').value;
+  const pid  = $('#me-project').value;
   const date = $('#me-date').value;
   const sStr = $('#me-start').value;
   const eStr = $('#me-end').value;
   if (!pid||!date||!sStr||!eStr) { toast('Bitte alles ausfüllen.',true); return; }
   const start = new Date(`${date}T${sStr}:00`);
-  const end = new Date(`${date}T${eStr}:00`);
+  const end   = new Date(`${date}T${eStr}:00`);
   if (end <= start) { toast('Ende muss nach Start liegen.',true); return; }
   const duration = end.getTime() - start.getTime();
-  entries.push({ id:uid(), projectId:pid, start:start.toISOString(), end:end.toISOString(), duration, date });
+
+  if (editEntryId) {
+    const idx = entries.findIndex(x => x.id === editEntryId);
+    if (idx !== -1) {
+      entries[idx] = { ...entries[idx], projectId:pid, start:start.toISOString(), end:end.toISOString(), duration, date };
+    }
+    toast('Eintrag aktualisiert');
+  } else {
+    entries.push({ id:uid(), projectId:pid, start:start.toISOString(), end:end.toISOString(), duration, date });
+    toast('Eintrag gespeichert');
+  }
+
+  editEntryId = null;
   saveEntries();
   closeAllModals();
   renderAll();
-  toast('Eintrag gespeichert');
 }
 
 // ============================================
-// CSV EXPORT
+// CSV EXPORT (current week view)
 // ============================================
 function exportCSV() {
-  const dates = weekDates();
+  const dates = weekDates(weekOffset);
   const weekE = entries.filter(e=>dates.includes(e.date)).sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
   if (!weekE.length) { toast('Keine Daten zum Exportieren.',true); return; }
   const rows = [['Datum','Projekt','Start','Ende','Dauer (Min)']];
@@ -484,6 +586,62 @@ function exportCSV() {
   a.href = url; a.download = `timetrack_${dates[0]}_${dates[6]}.csv`; a.click();
   URL.revokeObjectURL(url);
   toast('CSV exportiert');
+}
+
+// ============================================
+// JSON BACKUP / RESTORE
+// ============================================
+function exportJSON() {
+  const data = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    user,
+    projects,
+    entries,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `timetrack_backup_${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup exportiert');
+}
+
+function triggerImport() {
+  $('#import-file').click();
+}
+
+function handleImport(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const data = JSON.parse(evt.target.result);
+      if (!Array.isArray(data.projects) || !Array.isArray(data.entries)) throw new Error();
+      confirmAction(
+        'Daten importieren',
+        `${data.projects.length} Projekte und ${data.entries.length} Einträge werden importiert. Vorhandene Daten werden überschrieben.`,
+        () => {
+          projects = data.projects;
+          entries  = data.entries;
+          if (data.user) { user = data.user; saveUser(); $('#header-user').textContent = user.name; }
+          saveProjects();
+          saveEntries();
+          renderAll();
+          closeAllModals();
+          toast('Daten importiert');
+        },
+        'Importieren',
+        'btn-accent'
+      );
+    } catch {
+      toast('Ungültige Backup-Datei.', true);
+    }
+  };
+  reader.readAsText(file);
+  $('#import-file').value = '';
 }
 
 // ============================================
@@ -504,13 +662,17 @@ function saveSettings() {
 }
 
 function resetAll() {
-  confirmAction('Alles zurücksetzen', 'Alle Projekte, Einträge und Einstellungen werden unwiderruflich gelöscht.', () => {
-    localStorage.removeItem(K.USER);
-    localStorage.removeItem(K.PROJECTS);
-    localStorage.removeItem(K.ENTRIES);
-    localStorage.removeItem(K.TIMER);
-    location.reload();
-  });
+  confirmAction(
+    'Alles zurücksetzen',
+    'Alle Projekte, Einträge und Einstellungen werden unwiderruflich gelöscht.',
+    () => {
+      localStorage.removeItem(K.USER);
+      localStorage.removeItem(K.PROJECTS);
+      localStorage.removeItem(K.ENTRIES);
+      localStorage.removeItem(K.TIMER);
+      location.reload();
+    }
+  );
 }
 
 // ============================================
@@ -519,11 +681,17 @@ function resetAll() {
 let confirmCb = null;
 
 function openModal(id) { $('#'+id).classList.remove('hidden'); }
-function closeAllModals() { $$('.modal').forEach(m=>m.classList.add('hidden')); confirmCb=null; }
+function closeAllModals() {
+  $$('.modal').forEach(m=>m.classList.add('hidden'));
+  confirmCb = null;
+  editEntryId = null;
+}
 
-function confirmAction(title, msg, cb) {
+function confirmAction(title, msg, cb, okLabel = 'Löschen', okClass = 'btn-danger') {
   $('#mc-title').textContent = title;
   $('#mc-msg').textContent = msg;
+  $('#mc-ok').textContent = okLabel;
+  $('#mc-ok').className = `btn ${okClass}`;
   confirmCb = cb;
   openModal('modal-confirm');
 }
@@ -566,31 +734,48 @@ function bindEvents() {
   $('#mp-save').addEventListener('click', saveProject);
   $('#mp-name').addEventListener('keydown', e => { if(e.key==='Enter') saveProject(); });
 
-  // Manual
+  // Manual / edit entry
   $('#btn-manual').addEventListener('click', openManual);
   $('#me-save').addEventListener('click', saveManual);
 
-  // CSV
+  // CSV (uses current weekOffset)
   $('#btn-csv').addEventListener('click', exportCSV);
+
+  // Week navigation
+  $('#btn-week-prev').addEventListener('click', () => { weekOffset--; renderWeek(); });
+  $('#btn-week-next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; renderWeek(); } });
+  $('#btn-week-today').addEventListener('click', () => { weekOffset = 0; renderWeek(); });
 
   // Settings
   $('#btn-settings').addEventListener('click', openSettings);
   $('#ms-save').addEventListener('click', saveSettings);
   $('#btn-reset').addEventListener('click', resetAll);
+  $('#btn-export-json').addEventListener('click', exportJSON);
+  $('#btn-import-json').addEventListener('click', triggerImport);
+  $('#import-file').addEventListener('change', e => handleImport(e.target.files[0]));
 
   // Confirm modal
   $('#mc-ok').addEventListener('click', () => {
+    const cb = confirmCb;
     closeAllModals();
-    if (confirmCb) confirmCb();
-    confirmCb = null;
+    if (cb) cb();
   });
 
-  // Modal cancel/backdrop
+  // Modal cancel / backdrop
   $$('.modal-cancel').forEach(b => b.addEventListener('click', closeAllModals));
   $$('.modal-bg').forEach(bg => bg.addEventListener('click', closeAllModals));
-  document.addEventListener('keydown', e => { if (e.key==='Escape') closeAllModals(); });
 
-  // Page visibility: re-render timer when tab becomes visible again
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeAllModals(); return; }
+    // Space = stop running timer (when no input is focused)
+    if (e.key === ' ' && timer && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      stopTimerAction();
+    }
+  });
+
+  // Re-render timer on tab visibility change
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && timer) { updateClock(); renderChips(); }
   });
